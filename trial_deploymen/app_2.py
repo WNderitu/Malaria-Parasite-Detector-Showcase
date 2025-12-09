@@ -12,7 +12,7 @@ import io
 # 1. Path to your ONNX model weights
 # --- File Paths ---
 base_path = os.path.dirname(__file__)
-model_path = os.path.join(base_path, 'best(2).onnx')
+model_path = os.path.join(base_path, 'best (2).onnx')
 
 # --- Validate Files ---
 # Check if files exist
@@ -37,14 +37,14 @@ CLASS_NAMES = ['red blood cell', 'leukocyte', 'schizont', 'ring', 'gametocyte', 
 @st.cache_resource
 def load_model():
     """Loads the YOLOv8 model (including ONNX engines) once."""
-    if not os.path.exists(MODEL_PATH):
-        st.error(f"Model not found at relative path: {MODEL_PATH}")
-        st.warning("Please verify the MODEL_PATH variable and commit 'best.onnx' to your GitHub repo.")
+    if not os.path.exists(model_path):
+        st.error(f"Model not found at relative path: {model_path}")
+        st.warning("Please verify the model_path variable and commit 'best (2).onnx' to your GitHub repo.")
         return None
     
     try:
         # YOLO() handles both .pt and .onnx file types automatically
-        model = YOLO(MODEL_PATH)
+        model = YOLO(model_path)
         st.success("ONNX Model loaded successfully!")
         return model
     except Exception as e:
