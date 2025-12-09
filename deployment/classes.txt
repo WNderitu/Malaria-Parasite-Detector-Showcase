@@ -1,1 +1,6 @@
-
+red blood cell
+leukocyte
+schizont
+ring
+gametocyte
+trophozoite
