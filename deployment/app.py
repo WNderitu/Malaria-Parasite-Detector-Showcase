@@ -14,7 +14,6 @@ st.set_page_config(
 )
 
 # --- Standard Class Definitions ---
-# CRITICAL: This list MUST match the order of classes in your 'classes.txt'
 STANDARD_CLASSES = [
     'red blood cell', 
     'leukocyte', 
@@ -41,7 +40,6 @@ if not os.path.exists(classes_path):
 else:
     st.success(" ✅ Class names file found.")
 
-
 # --- Load Model & Classes ---
 @st.cache_resource
 def load_onnx_model(model_path):
@@ -67,11 +65,9 @@ def load_class_names(classes_path):
 net = load_onnx_model(model_path)
 class_names = load_class_names(classes_path)
 
-# Ensure the loaded class names match the expected number
 if len(class_names) != len(STANDARD_CLASSES):
     st.warning(f"Class count mismatch! File has {len(class_names)} classes, expected {len(STANDARD_CLASSES)}. Please verify 'classes.txt'.")
     class_names = STANDARD_CLASSES
-
 
 st.title("🔬 Malaria Parasite (P.vivax) Detection using YOLOV8n")
 
@@ -86,48 +82,46 @@ show_only_parasites = st.sidebar.checkbox("Show Only Parasite Detections", value
 color_scheme = st.sidebar.selectbox("Color Scheme", ["Default", "High Contrast", "Pastel"], index=0)
 
 # --- Image Processing Function ---
-def process_image(net, image, conf_threshold, nms_threshold, class_names, show_boxes=True, show_labels=True, show_only_parasites=False, color_scheme="Default"):
+def process_image(net, image, conf_threshold, nms_threshold, class_names,
+                  show_boxes=True, show_labels=True, show_only_parasites=False, color_scheme="Default"):
     
-    # RESOLUTION CHANGE: Updated to 1280x1280
     INPUT_WIDTH, INPUT_HEIGHT = 1280, 1280
     
-    # 1. Convert PIL image to BGR numpy array for OpenCV consistency
     img_cv_rgb = np.array(image.convert("RGB"))
     img_cv = cv2.cvtColor(img_cv_rgb, cv2.COLOR_RGB2BGR)
     
-    # 2. Prepare blob for inference
     blob = cv2.dnn.blobFromImage(img_cv, 1/255.0, (INPUT_WIDTH, INPUT_HEIGHT), swapRB=True, crop=False)
     net.setInput(blob)
-    
-    # Add a visual indicator in the console logs for the resolution used
-    # print(f"Processing image at {INPUT_WIDTH}x{INPUT_HEIGHT} resolution.") 
-    
-    preds = net.forward()
-    detections = preds[0].T
 
+    # --- Debugging lines ---
+    print("Blob shape:", blob.shape)
+    print("Unconnected output layers:", net.getUnconnectedOutLayersNames())
+    print("All layer names:", net.getLayerNames())
+
+    try:
+        preds = net.forward()
+        print("Preds type:", type(preds))
+        if isinstance(preds, list):
+            print("Preds[0] shape:", preds[0].shape)
+        else:
+            print("Preds shape:", preds.shape)
+    except Exception as e:
+        print("Error during forward pass:", e)
+        return img_cv, {name: 0 for name in class_names}
+
+    detections = preds[0].T
     boxes, confidences, class_ids = [], [], []
     
-# --- UPDATED SECTION FOR PARASITE IDs ---
-    # We rely on the globally defined PARASITE_STAGES list and dynamically find their indices
-    # based on the order of the loaded class_names list.
-    PARASITE_STAGES = ['schizont', 'ring', 'gametocyte', 'trophozoite']
-    
-    # We only include the ID if the class name is actually in the loaded list.
     parasite_IDs = {class_names.index(cls) for cls in PARASITE_STAGES if cls in class_names}
-    
-    # For reference, based on the standard list, parasite_IDs should be {2, 3, 4, 5}
 
-
-    # Color maps (Defined in BGR format for OpenCV drawing)
-    # BGR: (B, G, R)
     DEFAULT_COLOR_MAP = {
-        'red blood cell': (0, 0, 255),    # RED
-        'leukocyte': (255, 255, 255),     # WHITE
-        'schizont': (0, 255, 255),        # YELLOW
-        'ring': (0, 255, 0),              # GREEN
-        'gametocyte': (255, 0, 255),      # MAGENTA/PURPLE
-        'trophozoite': (255, 0, 0),       # BLUE
-        'default': (128, 128, 128)        # GRAY
+        'red blood cell': (0, 0, 255),
+        'leukocyte': (255, 255, 255),
+        'schizont': (0, 255, 255),
+        'ring': (0, 255, 0),
+        'gametocyte': (255, 0, 255),
+        'trophozoite': (255, 0, 0),
+        'default': (128, 128, 128)
     }
     HIGH_CONTRAST_MAP = {k: (0, 0, 255) for k in DEFAULT_COLOR_MAP} 
     PASTEL_MAP = {k: (200, 180, 255) for k in DEFAULT_COLOR_MAP}
@@ -146,11 +140,9 @@ def process_image(net, image, conf_threshold, nms_threshold, class_names, show_b
         if confidence > conf_threshold:
             classes_scores = row[5:]
             class_id = np.argmax(classes_scores)
-            
             if class_id >= len(class_names):
                 continue
             if classes_scores[class_id] > 0.0:
-            
                 x_scale = img_cv.shape[1] / INPUT_WIDTH
                 y_scale = img_cv.shape[0] / INPUT_HEIGHT
                 center_x, center_y, width, height = row[0]*x_scale, row[1]*y_scale, row[2]*x_scale, row[3]*y_scale
@@ -161,16 +153,18 @@ def process_image(net, image, conf_threshold, nms_threshold, class_names, show_b
                 class_ids.append(class_id)
 
     if not boxes:
+        print("No boxes detected.")
         return img_cv, class_counts
 
     indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, nms_threshold)
+    print("Boxes before NMS:", len(boxes), "Boxes after NMS:", len(indices))
+
     if len(indices) > 0:
         indices = indices.flatten()
     else:
         return img_cv, class_counts
 
     if show_only_parasites:
-        # This line now uses the correct, dynamically generated parasite_IDs set
         indices = [i for i in indices if class_ids[i] in parasite_IDs]
 
     for i in indices:
@@ -185,132 +179,7 @@ def process_image(net, image, conf_threshold, nms_threshold, class_names, show_b
 
         if show_labels:
             label = f"{detected_class_name}: {confidences[i]:.2f}"
-            # Draw label with black outline and white fill for visibility
             cv2.putText(img_cv, label, (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2, cv2.LINE_AA) 
             cv2.putText(img_cv, label, (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
     return img_cv, class_counts
-
-# --- User Interface ---
-st.header(" 🩸 Upload image of blood smear slide")
-uploaded_files = st.file_uploader("Choose one or more image files", type=['jpg','jpeg','png','bmp'], accept_multiple_files=True)
-
-st.sidebar.header("📊 Chart Settings")
-chart_mode = st.sidebar.radio(
-    'Chart Mode',
-    ['Counts', 'Percentages'],
-    index=0,
-    key='chart_mode_radio'
-)
-
-if uploaded_files and net and class_names:
-    st.subheader(f"Processing {len(uploaded_files)} Images...")
-    if st.button("  ▶️  Run detection"):
-        progress_bar = st.progress(0)
-        total_images = len(uploaded_files)
-        results_summary = []
-
-        for i, file in enumerate(uploaded_files):
-            image = Image.open(file)
-            detected_img_cv, class_counts = process_image(
-                net, image, confidence_threshold, nms_threshold, class_names,
-                show_boxes, show_labels, show_only_parasites, color_scheme
-            )
-            detected_img_rgb = cv2.cvtColor(detected_img_cv, cv2.COLOR_BGR2RGB)
-            
-            col_img, col_data = st.columns([2,1])
-            with col_img:
-                st.image(detected_img_rgb, caption=f"Processed: {file.name}", use_container_width=True)
-            
-            with col_data:
-                st.markdown(f"#### 🧪 Results for **{file.name}**")
-                
-                # --- Parasitemia Calculation ---
-                total_parasite_count = sum(class_counts.get(stage,0) for stage in PARASITE_STAGES)
-                total_detections = sum(class_counts.values())
-                parasitemia = (total_parasite_count/total_detections)*100 if total_detections>0 else 0.0
-                parasitemia_display = f"{parasitemia:.2f} %"
-                
-                st.metric("**Total Parasite Count (All Stages)**", total_parasite_count)
-                st.metric(
-                    label='**Estimated Parasitemia Rate**',
-                    value=parasitemia_display,
-                    help=("Calculated as: (Total Parasite Detections / Total Cell Detections) * 100. It estimates the proportion of infected cells among all detected cells.")
-                )
-                st.info(f"**Total Objects Counted:** {total_detections}")
-
-                # Class Count Overview
-                st.markdown("##### 🧫 Class Counts per Image")
-                cols = st.columns(3)
-                all_classes_display = STANDARD_CLASSES 
-
-                for idx, class_name in enumerate(all_classes_display):
-                    count = class_counts.get(class_name, 0)
-                    with cols[idx % 3]:
-                        st.caption(class_name.title())
-                        st.markdown(f"**{count}**")
-
-                # Bar Chart
-                counts_df = pd.DataFrame(list(class_counts.items()), columns=["Class", "Count"])
-                if not counts_df.empty:
-                    total = counts_df["Count"].sum()
-                    counts_df["Percentage"] = (counts_df["Count"] / total) * 100 if total > 0 else 0
-                    
-                    if chart_mode == 'Counts':
-                        x_field = "Count"
-                        x_title = "Number of Detections"
-                        chart_title = "Detection Counts per Class"
-                    else:
-                        x_field = "Percentage"
-                        x_title = "Detections (%)"
-                        chart_title = "Detection % per Class"
-                    
-                    # Build chart
-                    chart = (
-                        alt.Chart(counts_df)
-                        .mark_bar()
-                        .encode(
-                            x=alt.X(f"{x_field}:Q", title=x_title),
-                            y=alt.Y("Class:N", sort='-x', title="Class Name"),
-                            color=alt.Color("Class:N",legend=None),
-                            tooltip=[
-                                alt.Tooltip('Class:N',title="Class"),
-                                alt.Tooltip("Count:Q", title="Count"),
-                                alt.Tooltip("Percentage:Q", title="Percentage", format=".2f")
-                            ]
-                        )
-                        .properties(width="container",height=300,title=chart_title)
-                    )
-                    st.altair_chart(chart, use_container_width=True)
-                else:
-                    st.warning("No detections found to visualize.")
-                    
-                # Append results for CSV
-                results_summary.append({
-                    "Image": file.name,
-                    "Total Parasites": total_parasite_count,
-                    "Total Detections": total_detections,
-                    "Parasitemia (%)": f"{parasitemia:.2f}",
-                    **{f"Count_{cls}": count for cls, count in class_counts.items()}
-                })
-
-            st.divider()
-            progress_bar.progress((i+1)/total_images)
-
-        progress_bar.empty()
-        st.success(" ✅ Detection and quantification complete!")
-
-        # --- CSV Export ---
-        if results_summary:
-            df_results = pd.DataFrame(results_summary)
-            csv_buffer = io.StringIO()
-            df_results.to_csv(csv_buffer, index=False)
-            st.sidebar.download_button(
-                label="📥 Download Results as CSV",
-                data=csv_buffer.getvalue(),
-                file_name="malaria_detection_results.csv",
-                mime="text/csv",
-                help="Export per-image counts and parasitemia rates."
-            )
-elif not net:
-    st.error(" ❌ ONNX model could not be loaded. Please check the path and file integrity.")
