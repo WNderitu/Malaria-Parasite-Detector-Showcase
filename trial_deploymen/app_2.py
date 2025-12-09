@@ -12,7 +12,7 @@ import io
 # 1. Path to your ONNX model weights
 # --- File Paths ---
 base_path = os.path.dirname(__file__)
-model_path = os.path.join(base_path, 'best (2).onnx')
+model_path = os.path.join(base_path, 'best(2).onnx')
 
 # --- Validate Files ---
 # Check if files exist
