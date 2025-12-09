@@ -1,1 +1,17 @@
 libgomp1
+libgl1
+libglib2.0-0
+libgthread-2.0-0
+libsm6
+libxext6
+libxrender1
+libxrender-dev
+libnss3
+libxss1
+libasound2
+libatk1.0-0
+libcairo2
+libpango-1.0-0
+ffmpeg
+ca-certificates
+wget
