@@ -1,4 +1,4 @@
-# Plasmodium Vivax (malaria) parasite detector and counter using YOLOv8 Model version 2
+# Plasmodium Vivax (malaria) parasite detector and counter using YOLOv8n Model version 2
 
 ## Introduction
 
