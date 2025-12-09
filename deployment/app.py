@@ -10,7 +10,7 @@ import onnxruntime as ort
 
 # Set page configuration
 st.set_page_config(
-    page_title="Malaria Parasite (P.vivax) Detector using YOLOv8n v2",
+    page_title="Malaria Parasite (P.vivax) Detector using YOLOv8n",
     layout="wide"
 )
 
@@ -52,7 +52,7 @@ def load_class_names(classes_path):
 session = load_onnx_model(model_path)
 class_names = load_class_names(classes_path)
 
-st.title("🔬 Malaria Parasite (P.vivax) Detection using YOLOV8n v2")
+st.title("🔬 Malaria Parasite (P.vivax) Detection using YOLOV8n")
 
 # --- Dynamic Sidebar ---
 st.sidebar.header("⚙️ Model & Visualization Settings")
@@ -190,11 +190,11 @@ if uploaded_files and session and class_names:
                 st.metric(
                     label='**Estimated Parasitemia Rate**',
                     value=parasitemia_display,
-                    help=("Calculated as: (Total Parasite Detections / Total Cell Detections) * 100. It estimates the proportion of infected cells among all detected cells.")
+                    help=("Calculated as: (Total Parasite Detections / Total Cell Detections) * 100.")
                     )
                 st.info(f"**Total Objects Counted:** {total_detections}")
 
-                # Class Count Overview
+                # --- Class Count Overview ---
                 st.markdown("##### 🧫 Class Counts per Image")
                 cols = st.columns(3) 
                 all_classes = ['red blood cell', 'leukocyte', 'schizont', 'ring', 'gametocyte', 'trophozoite']
