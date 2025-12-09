@@ -101,23 +101,28 @@ def process_image(session, image, conf_threshold, nms_threshold, class_names,
     COLOR_MAP = DEFAULT_COLOR_MAP if color_scheme=="Default" else HIGH_CONTRAST_MAP if color_scheme=="High Contrast" else PASTEL_MAP
     
     # Decode predictions
-    for det in preds:
-        x, y, w, h, conf, *cls_scores = det
-        if conf < conf_threshold:
-            continue
-        class_id = np.argmax(cls_scores)
-        if class_id >= len(class_names):
-            continue
-        
-        # Scale back to original image size
-        x_scale = img_cv_rgb.shape[1] / INPUT_WIDTH
-        y_scale = img_cv_rgb.shape[0] / INPUT_HEIGHT
-        cx, cy = x * x_scale, y * y_scale
-        bw, bh = w * x_scale, h * y_scale
-        x1, y1 = int(cx - bw/2), int(cy - bh/2)
-        boxes.append([x1, y1, int(bw), int(bh)])
-        confidences.append(float(conf))
-        class_ids.append(class_id)
+for det in preds:
+    x, y, w, h, obj_conf, *cls_scores = det
+    class_id = np.argmax(cls_scores)
+    class_conf = cls_scores[class_id]
+    conf = obj_conf * class_conf   # final confidence
+
+    if conf < conf_threshold:
+        continue
+    if class_id >= len(class_names):
+        continue
+
+    # Scale back to original image size
+    x_scale = img_cv_rgb.shape[1] / INPUT_WIDTH
+    y_scale = img_cv_rgb.shape[0] / INPUT_HEIGHT
+    cx, cy = x * x_scale, y * y_scale
+    bw, bh = w * x_scale, h * y_scale
+    x1, y1 = int(cx - bw/2), int(cy - bh/2)
+
+    boxes.append([x1, y1, int(bw), int(bh)])
+    confidences.append(float(conf))
+    class_ids.append(class_id)
+
     
     if not boxes:
         return img_cv_rgb, class_counts
