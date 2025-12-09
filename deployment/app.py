@@ -1,4 +1,3 @@
-
 import streamlit as st
 import cv2
 import numpy as np
@@ -14,22 +13,34 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- Standard Class Definitions ---
+# CRITICAL: This list MUST match the order of classes in your 'classes.txt'
+STANDARD_CLASSES = [
+    'red blood cell', 
+    'leukocyte', 
+    'schizont', 
+    'ring', 
+    'gametocyte', 
+    'trophozoite'
+]
+PARASITE_STAGES = ['schizont', 'ring', 'gametocyte', 'trophozoite']
+
 # --- File Paths ---
 base_path = os.path.dirname(__file__)
 model_path = os.path.join(base_path, 'best.onnx')
-classes_path = os.path.join(base_path, 'classes.txt')
+classes_path = os.path.join(base_path, 'classes.txt') 
 
 # --- Validate Files ---
-# Check if files exist
 if not os.path.exists(model_path):
     st.error(f"ONNX model not found at: {model_path}")
 else:
-    st.success("✅ ONNX model loaded successfully.")
+    st.success("✅ ONNX model found.")
 
 if not os.path.exists(classes_path):
-    st.error(f"Class names file not found at: {classes_path}")
+    st.warning(f"Class names file not found at: {classes_path}. Using hardcoded classes for validation.")
 else:
-    st.success(" ✅ Class names file loaded successfully.")
+    st.success(" ✅ Class names file found.")
+
 
 # --- Load Model & Classes ---
 @st.cache_resource
@@ -44,16 +55,25 @@ def load_onnx_model(model_path):
 @st.cache_data
 def load_class_names(classes_path):
     try:
-        with open(classes_path, "r") as f:
-            return [line.strip() for line in f.readlines()]
+        if os.path.exists(classes_path):
+             with open(classes_path, "r") as f:
+                return [line.strip() for line in f.readlines()]
+        else:
+             return STANDARD_CLASSES 
     except Exception as e:
-        st.error(f"Error loading class names: {e}. Attempted path: {classes_path}")
-        return []
+        st.error(f"Error loading class names from file: {e}. Using hardcoded standard list.")
+        return STANDARD_CLASSES
 
 net = load_onnx_model(model_path)
 class_names = load_class_names(classes_path)
 
-st.title("🔬 Malaria Parasite (P.vivax) Detection using YOLOV8n v2")
+# Ensure the loaded class names match the expected number
+if len(class_names) != len(STANDARD_CLASSES):
+    st.warning(f"Class count mismatch! File has {len(class_names)} classes, expected {len(STANDARD_CLASSES)}. Please verify 'classes.txt'.")
+    class_names = STANDARD_CLASSES
+
+
+st.title("🔬 Malaria Parasite (P.vivax) Detection using YOLOV8n")
 
 # --- Dynamic Sidebar ---
 st.sidebar.header("⚙️ Model & Visualization Settings")
@@ -67,28 +87,44 @@ color_scheme = st.sidebar.selectbox("Color Scheme", ["Default", "High Contrast",
 
 # --- Image Processing Function ---
 def process_image(net, image, conf_threshold, nms_threshold, class_names,
-                  show_boxes=True, show_labels=True, show_only_parasites=False, color_scheme="Default"):
+                  show_boxes=True, show_labels=True, show_only_parasites=False, color_scheme="Default"):
+    
+    # RESOLUTION CHANGE: Updated to 1280x1280
     INPUT_WIDTH, INPUT_HEIGHT = 1280, 1280
-    img_cv = np.array(image.convert("RGB"))
+    
+    # 1. Convert PIL image to BGR numpy array for OpenCV consistency
+    img_cv_rgb = np.array(image.convert("RGB"))
+    img_cv = cv2.cvtColor(img_cv_rgb, cv2.COLOR_RGB2BGR)
+    
+    # 2. Prepare blob for inference
     blob = cv2.dnn.blobFromImage(img_cv, 1/255.0, (INPUT_WIDTH, INPUT_HEIGHT), swapRB=True, crop=False)
     net.setInput(blob)
+    
+    # Add a visual indicator in the console logs for the resolution used
+    # print(f"Processing image at {INPUT_WIDTH}x{INPUT_HEIGHT} resolution.") 
+    
     preds = net.forward()
     detections = preds[0].T
 
     boxes, confidences, class_ids = [], [], []
-    parasite_IDs = {2, 3, 4, 5}
+    
+    # Get the Class IDs for parasite stages
+    # Assuming class_names order aligns with model output
+    parasite_IDs = {class_names.index(cls) for cls in PARASITE_STAGES if cls in class_names}
 
-    # Color maps
+
+    # Color maps (Defined in BGR format for OpenCV drawing)
+    # BGR: (B, G, R)
     DEFAULT_COLOR_MAP = {
         'red blood cell': (0, 0, 255),    # RED
         'leukocyte': (255, 255, 255),     # WHITE
         'schizont': (0, 255, 255),        # YELLOW
         'ring': (0, 255, 0),              # GREEN
-        'gametocyte': (255, 0, 255),      # MAGENTA
+        'gametocyte': (255, 0, 255),      # MAGENTA/PURPLE
         'trophozoite': (255, 0, 0),       # BLUE
         'default': (128, 128, 128)        # GRAY
     }
-    HIGH_CONTRAST_MAP = {k: (255, 255, 0) for k in DEFAULT_COLOR_MAP}
+    HIGH_CONTRAST_MAP = {k: (0, 0, 255) for k in DEFAULT_COLOR_MAP} 
     PASTEL_MAP = {k: (200, 180, 255) for k in DEFAULT_COLOR_MAP}
 
     if color_scheme == "High Contrast":
@@ -105,13 +141,16 @@ def process_image(net, image, conf_threshold, nms_threshold, class_names,
         if confidence > conf_threshold:
             classes_scores = row[5:]
             class_id = np.argmax(classes_scores)
+            
             if class_id >= len(class_names):
                 continue
             if classes_scores[class_id] > 0.0:
+            
                 x_scale = img_cv.shape[1] / INPUT_WIDTH
                 y_scale = img_cv.shape[0] / INPUT_HEIGHT
                 center_x, center_y, width, height = row[0]*x_scale, row[1]*y_scale, row[2]*x_scale, row[3]*y_scale
                 x, y, w, h = int(center_x - width/2), int(center_y - height/2), int(width), int(height)
+                
                 boxes.append([x, y, w, h])
                 confidences.append(float(confidence))
                 class_ids.append(class_id)
@@ -140,7 +179,9 @@ def process_image(net, image, conf_threshold, nms_threshold, class_names,
 
         if show_labels:
             label = f"{detected_class_name}: {confidences[i]:.2f}"
-            cv2.putText(img_cv, label, (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 1, cv2.LINE_AA)
+            # Draw label with black outline and white fill for visibility
+            cv2.putText(img_cv, label, (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2, cv2.LINE_AA) 
+            cv2.putText(img_cv, label, (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
     return img_cv, class_counts
 
@@ -153,15 +194,15 @@ chart_mode = st.sidebar.radio(
     'Chart Mode',
     ['Counts', 'Percentages'],
     index=0,
-    key='chart_mode_radio'  # unique key to prevent duplicates
+    key='chart_mode_radio'
 )
 
 if uploaded_files and net and class_names:
     st.subheader(f"Processing {len(uploaded_files)} Images...")
-    if st.button("  ▶️  Run detection"):
+    if st.button("  ▶️  Run detection"):
         progress_bar = st.progress(0)
         total_images = len(uploaded_files)
-        results_summary = []  # Collect results for CSV export
+        results_summary = []
 
         for i, file in enumerate(uploaded_files):
             image = Image.open(file)
@@ -178,46 +219,37 @@ if uploaded_files and net and class_names:
             with col_data:
                 st.markdown(f"#### 🧪 Results for **{file.name}**")
                 
-                parasite_stages = ['schizont','ring','gametocyte','trophozoite']
-                total_parasite_count = sum(class_counts.get(stage,0) for stage in parasite_stages)
+                # --- Parasitemia Calculation ---
+                total_parasite_count = sum(class_counts.get(stage,0) for stage in PARASITE_STAGES)
                 total_detections = sum(class_counts.values())
                 parasitemia = (total_parasite_count/total_detections)*100 if total_detections>0 else 0.0
                 parasitemia_display = f"{parasitemia:.2f} %"
-                               
+                
                 st.metric("**Total Parasite Count (All Stages)**", total_parasite_count)
                 st.metric(
                     label='**Estimated Parasitemia Rate**',
                     value=parasitemia_display,
                     help=("Calculated as: (Total Parasite Detections / Total Cell Detections) * 100. It estimates the proportion of infected cells among all detected cells.")
-                    )
+                )
                 st.info(f"**Total Objects Counted:** {total_detections}")
 
                 # Class Count Overview
                 st.markdown("##### 🧫 Class Counts per Image")
-                cols = st.columns(3) 
-                all_classes = ['red blood cell', 'leukocyte', 'schizont', 'ring', 'gametocyte', 'trophozoite']
+                cols = st.columns(3)
+                all_classes_display = STANDARD_CLASSES 
 
-                # Iterate through the defined classes for consistent order
-                for idx, class_name in enumerate(all_classes):
+                for idx, class_name in enumerate(all_classes_display):
                     count = class_counts.get(class_name, 0)
-    
-                    # Use the modulo operator (%) to distribute items into the 3 columns
                     with cols[idx % 3]:
-                        # Use st.caption and st.code for a very compact, non-metric look
-                        # st.caption gives the title, and st.markdown gives the bold count
                         st.caption(class_name.title())
                         st.markdown(f"**{count}**")
 
-                # st.markdown("---") 
-                        
                 # Bar Chart
                 counts_df = pd.DataFrame(list(class_counts.items()), columns=["Class", "Count"])
                 if not counts_df.empty:
-                    # Calculate percentages
                     total = counts_df["Count"].sum()
                     counts_df["Percentage"] = (counts_df["Count"] / total) * 100 if total > 0 else 0
-                                                          
-                    # Choose which column to plot based on mode
+                    
                     if chart_mode == 'Counts':
                         x_field = "Count"
                         x_title = "Number of Detections"
@@ -234,7 +266,7 @@ if uploaded_files and net and class_names:
                         .encode(
                             x=alt.X(f"{x_field}:Q", title=x_title),
                             y=alt.Y("Class:N", sort='-x', title="Class Name"),
-                            color=alt.Color("class:N",legend=None),
+                            color=alt.Color("Class:N",legend=None),
                             tooltip=[
                                 alt.Tooltip('Class:N',title="Class"),
                                 alt.Tooltip("Count:Q", title="Count"),
