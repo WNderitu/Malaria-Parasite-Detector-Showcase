@@ -124,7 +124,7 @@ for det in preds:
     class_ids.append(class_id)
     
     if not boxes:
-    return img_cv_rgb, class_counts
+return img_cv_rgb, class_counts
     
     indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, nms_threshold)
     if len(indices) > 0:
