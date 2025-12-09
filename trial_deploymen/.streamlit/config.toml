@@ -1,1 +1,3 @@
-
+[general]
+# Use a well-supported Python version for ML libraries
+pythonVersion = "3.10"
