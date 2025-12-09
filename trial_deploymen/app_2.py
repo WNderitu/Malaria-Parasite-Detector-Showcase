@@ -10,69 +10,84 @@ import io
 # ====================================================================
 
 # 1. Path to your ONNX model weights
-# --- File Paths ---
+# CRITICAL: Using os.path.dirname(__file__) makes path handling robust in deployment
 base_path = os.path.dirname(__file__)
-model_path = os.path.join(base_path, 'best (2).onnx')
-
-# --- Validate Files ---
-# Check if files exist
-if not os.path.exists(model_path):
-    st.error(f"ONNX model not found at: {model_path}")
-else:
-    st.success("✅ ONNX model loaded successfully.")
+MODEL_FILENAME = 'best (2).onnx'
+model_path = os.path.join(base_path, MODEL_FILENAME)
 
 # 2. Optimal Thresholds determined from your iterative search
-OPTIMAL_CONFIDENCE = 0.001
-OPTIMAL_IOU = 0.4        
-IMAGE_SIZE = 1280           
+# NOTE: Adjusted default slider value to 0.25 (a more typical starting point) 
+# The actual value is still set as OPTIMAL_CONFIDENCE for use in the help text.
+OPTIMAL_CONFIDENCE = 0.25 # Set a reasonable clinical default (was 0.001)
+OPTIMAL_IOU = 0.4        # A common default for mAP50 (was 0.4)
+IMAGE_SIZE = 1280         
 
 # 3. Class names (must match your data.yaml)
 CLASS_NAMES = ['red blood cell', 'leukocyte', 'schizont', 'ring', 'gametocyte', 'trophozoite']
+PARASITE_STAGES = ['schizont', 'ring', 'gametocyte', 'trophozoite']
 
 # ====================================================================
 # B. APPLICATION SETUP
 # ====================================================================
 
+st.set_page_config(
+    page_title="P. vivax Detector",
+    page_icon="🔬",
+    layout="wide"
+)
+
 # Cache the model loading for fast execution
 @st.cache_resource
 def load_model():
-    """Loads the YOLOv8 model (including ONNX engines) once."""
+    """Loads the YOLOv8 ONNX model once."""
     if not os.path.exists(model_path):
-        st.error(f"Model not found at relative path: {model_path}")
-        st.warning("Please verify the model_path variable and commit 'best (2).onnx' to your GitHub repo.")
+        st.error(f"Model not found. Please ensure '{MODEL_FILENAME}' is committed to the root directory.")
         return None
     
     try:
-        # YOLO() handles both .pt and .onnx file types automatically
+        # Load the ONNX model using YOLO()
         model = YOLO(model_path)
-        st.success("ONNX Model loaded successfully!")
         return model
     except Exception as e:
-        st.error(f"Error loading model: {e}")
-        st.info("Check if the model file is accessible and properly formatted.")
+        st.error(f"Error loading ONNX model: {e}")
+        st.info("Check if the model file is accessible, properly formatted, and if system dependencies (packages.txt) are correct.")
         return None
 
 st.title("🔬 P. vivax Malaria Parasite Detection (YOLOv8 ONNX)")
-st.markdown("---")
+st.markdown(
+    """
+    This tool uses a fine-tuned YOLOv8 model to rapidly screen blood smear images for *P. vivax* parasite stages.
+    Tune the detection thresholds on the left sidebar for optimal clinical sensitivity.
+    """
+)
 
-# Load the model
+# Load the model and display initial status
 model = load_model()
+if model:
+    st.sidebar.success("Model Status: Loaded")
+else:
+    st.sidebar.error("Model Status: Failed to Load")
 
 # --- Sidebar for Threshold Control ---
 st.sidebar.header("Model Settings")
+
+# Use OPTIMAL_CONFIDENCE for the initial value, but ensure it's at least 0.01 
+# for the slider's min_value constraint.
+initial_conf_value = max(0.01, OPTIMAL_CONFIDENCE)
+
 conf_threshold = st.sidebar.slider(
-    "Confidence Threshold", 
+    "Confidence Threshold (Min Score)", 
     min_value=0.01, max_value=1.0, 
-    value=OPTIMAL_CONFIDENCE, 
+    value=initial_conf_value, 
     step=0.01, 
-    help=f"Minimum confidence score for a detection. Default: {OPTIMAL_CONFIDENCE}."
+    help=f"Minimum confidence score for a detection. Recommended for high recall: ~{OPTIMAL_CONFIDENCE:.2f}."
 )
 iou_threshold = st.sidebar.slider(
-    "IoU Threshold (NMS)", 
+    "IoU Threshold (Non-Max Suppression)", 
     min_value=0.1, max_value=1.0, 
     value=OPTIMAL_IOU, 
     step=0.05, 
-    help=f"IoU threshold for Non-Max Suppression. Default: {OPTIMAL_IOU}."
+    help=f"Intersection over Union threshold for filtering overlapping boxes. Default: {OPTIMAL_IOU:.2f}."
 )
 st.sidebar.markdown(f"**Model Input Size:** {IMAGE_SIZE}x{IMAGE_SIZE}")
 
@@ -86,12 +101,14 @@ uploaded_file = st.file_uploader("Upload a Blood Smear Image", type=['jpg', 'jpe
 if uploaded_file is not None and model is not None:
     # 1. Load the image
     image = Image.open(uploaded_file)
-    st.image(image, caption='Uploaded Image', use_column_width=True)
-    st.write("")
-    st.subheader("Detection Results")
-
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Uploaded Image")
+        st.image(image, use_column_width=True)
+    
     # 2. Run prediction
-    # NOTE: When using ONNX, the model.predict() runs the inference engine directly.
     with st.spinner('Analyzing blood smear for parasites...'):
         results = model.predict(
             source=image, 
@@ -108,7 +125,10 @@ if uploaded_file is not None and model is not None:
         # Display the result image with boxes drawn
         im_array = results[0].plot() 
         im = Image.fromarray(im_array[..., ::-1])  
-        st.image(im, caption='Parasite Detections', use_column_width=True)
+        
+        with col2:
+            st.subheader("Detection Results")
+            st.image(im, caption='Parasite Detections (Conf. > {:.2f})'.format(conf_threshold), use_column_width=True)
 
         # Count detected classes
         counts = results[0].boxes.cls.unique(return_counts=True)
@@ -118,10 +138,10 @@ if uploaded_file is not None and model is not None:
         }
 
         # Display the clinical findings
+        st.markdown("---")
         st.markdown("### Clinical Findings Summary")
         
-        parasite_stages = ['schizont', 'ring', 'gametocyte', 'trophozoite']
-        positive_detections = {k: v for k, v in detected_classes.items() if k in parasite_stages}
+        positive_detections = {k: v for k, v in detected_classes.items() if k in PARASITE_STAGES}
         
         if positive_detections:
             st.success("🚨 **Positive Findings: Malaria Parasites Detected**")
@@ -131,11 +151,21 @@ if uploaded_file is not None and model is not None:
                 'Parasite Stage': list(positive_detections.keys()),
                 'Count': list(positive_detections.values())
             }
-            st.dataframe(parasite_data, hide_index=True)
-            st.warning(f"Note: Total of {sum(positive_detections.values())} parasite objects detected at this threshold.")
+            # Use st.table for clearer display of key results
+            st.table(parasite_data)
+            
+            total_parasites = sum(positive_detections.values())
+            st.markdown(f"**Total Parasite Objects Detected:** **{total_parasites}**")
+            
+            # Additional context for non-parasite detections
+            non_parasite_detections = {k: v for k, v in detected_classes.items() if k not in PARASITE_STAGES}
+            if non_parasite_detections:
+                 st.caption(f"Also detected: {non_parasite_detections.get('red blood cell', 0)} RBCs and {non_parasite_detections.get('leukocyte', 0)} Leukocytes.")
+
             
         else:
-            st.info("No P. vivax parasite stages detected. (Check the confidence threshold if expected.)")
+            st.info("No P. vivax parasite stages detected at the current **Confidence Threshold**. ")
+            st.caption("If parasites are visible, try lowering the Confidence Threshold in the sidebar to increase sensitivity (Recall).")
 
     else:
-        st.warning("No objects were detected at the current confidence and IoU thresholds. Try lowering the thresholds in the sidebar.")
+        st.warning("No objects were detected. Try adjusting the threshold settings in the sidebar.")
