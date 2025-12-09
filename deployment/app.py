@@ -178,7 +178,7 @@ if uploaded_files and net and class_names:
             with col_data:
                 st.markdown(f"#### 🧪 Results for **{file.name}**")
                 
-                parasite_stages = ['trophozoite','ring','schizont','gametocyte','difficult']
+                parasite_stages = ['schizont','ring','gametocyte','trophozoite']
                 total_parasite_count = sum(class_counts.get(stage,0) for stage in parasite_stages)
                 total_detections = sum(class_counts.values())
                 parasitemia = (total_parasite_count/total_detections)*100 if total_detections>0 else 0.0
