@@ -147,7 +147,7 @@ def process_image(session, image, conf_threshold, nms_threshold, class_names,
     return img_cv, class_counts
 
 # --- User Interface ---
-st.header(" 🩸 Upload image of blood smear slide")
+st.header(" 🩸 Upload image of malaria blood smear")
 uploaded_files = st.file_uploader("Choose one or more image files", type=['jpg','jpeg','png','bmp'], accept_multiple_files=True)
 
 st.sidebar.header("📊 Chart Settings")
