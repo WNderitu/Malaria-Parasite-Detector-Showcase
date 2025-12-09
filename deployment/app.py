@@ -1,4 +1,5 @@
 import streamlit as st
+import onnxruntime as ort
 import cv2
 import numpy as np
 from PIL import Image
@@ -19,7 +20,6 @@ model_path = os.path.join(base_path, 'best.onnx')
 classes_path = os.path.join(base_path, 'classes.txt') 
 
 # --- Validate Files ---
-# Check if files exist
 if not os.path.exists(model_path):
     st.error(f"ONNX model not found at: {model_path}")
 else:
@@ -34,8 +34,8 @@ else:
 @st.cache_resource
 def load_onnx_model(model_path):
     try:
-        net = cv2.dnn.readNet(model_path)
-        return net
+        session = ort.InferenceSession(model_path)
+        return session
     except Exception as e:
         st.error(f"Error loading ONNX model: {e}. Attempted path: {model_path}")
         return None
@@ -49,7 +49,7 @@ def load_class_names(classes_path):
         st.error(f"Error loading class names: {e}. Attempted path: {classes_path}")
         return []
 
-net = load_onnx_model(model_path)
+session = load_onnx_model(model_path)
 class_names = load_class_names(classes_path)
 
 st.title("🔬 Malaria Parasite (P.vivax) Detection using YOLOV8n")
@@ -65,18 +65,27 @@ show_only_parasites = st.sidebar.checkbox("Show Only Parasite Detections", value
 color_scheme = st.sidebar.selectbox("Color Scheme", ["Default", "High Contrast", "Pastel"], index=0)
 
 # --- Image Processing Function ---
-def process_image(net, image, conf_threshold, nms_threshold, class_names,
+def process_image(session, image, conf_threshold, nms_threshold, class_names,
                   show_boxes=True, show_labels=True, show_only_parasites=False, color_scheme="Default"):
     INPUT_WIDTH, INPUT_HEIGHT = 1280, 1280
-    img_cv = np.array(image.convert("RGB"))
-    blob = cv2.dnn.blobFromImage(img_cv, 1/255.0, (INPUT_WIDTH, INPUT_HEIGHT), swapRB=True, crop=False)
-    net.setInput(blob)
-    preds = net.forward()
-    detections = preds[0].T
-
+    
+    # Convert PIL → numpy
+    img_cv_rgb = np.array(image.convert("RGB"))
+    img_resized = cv2.resize(img_cv_rgb, (INPUT_WIDTH, INPUT_HEIGHT))
+    img = img_resized.astype(np.float32) / 255.0
+    img = np.transpose(img, (2, 0, 1))  # HWC → CHW
+    img = np.expand_dims(img, axis=0)   # add batch dim
+    
+    # Run inference
+    outputs = session.run(None, {"images": img})
+    preds = outputs[0]  # shape (1, 33600, 10)
+    preds = preds[0]    # remove batch dim
+    
     boxes, confidences, class_ids = [], [], []
-    parasite_IDs = {2, 3, 4, 5 }
-
+    class_counts = {name: 0 for name in class_names}
+    
+    parasite_IDs = {2, 3, 4, 5}
+    
     # Color maps
     DEFAULT_COLOR_MAP = {
         'red blood cell': (0, 0, 255),
@@ -89,59 +98,57 @@ def process_image(net, image, conf_threshold, nms_threshold, class_names,
     }
     HIGH_CONTRAST_MAP = {k: (255, 255, 0) for k in DEFAULT_COLOR_MAP}
     PASTEL_MAP = {k: (200, 180, 255) for k in DEFAULT_COLOR_MAP}
-
-    if color_scheme == "High Contrast":
-        COLOR_MAP = HIGH_CONTRAST_MAP
-    elif color_scheme == "Pastel":
-        COLOR_MAP = PASTEL_MAP
-    else:
-        COLOR_MAP = DEFAULT_COLOR_MAP
-
-    class_counts = {name: 0 for name in class_names}
-
-    for row in detections:
-        confidence = row[4]
-        if confidence > conf_threshold:
-            classes_scores = row[5:]
-            class_id = np.argmax(classes_scores)
-            if class_id >= len(class_names):
-                continue
-            if classes_scores[class_id] > 0.0:
-                x_scale = img_cv.shape[1] / INPUT_WIDTH
-                y_scale = img_cv.shape[0] / INPUT_HEIGHT
-                center_x, center_y, width, height = row[0]*x_scale, row[1]*y_scale, row[2]*x_scale, row[3]*y_scale
-                x, y, w, h = int(center_x - width/2), int(center_y - height/2), int(width), int(height)
-                boxes.append([x, y, w, h])
-                confidences.append(float(confidence))
-                class_ids.append(class_id)
-
+    COLOR_MAP = DEFAULT_COLOR_MAP if color_scheme=="Default" else HIGH_CONTRAST_MAP if color_scheme=="High Contrast" else PASTEL_MAP
+    
+    # Decode predictions
+    for det in preds:
+        x, y, w, h, conf, *cls_scores = det
+        if conf < conf_threshold:
+            continue
+        class_id = np.argmax(cls_scores)
+        if class_id >= len(class_names):
+            continue
+        
+        # Scale back to original image size
+        x_scale = img_cv_rgb.shape[1] / INPUT_WIDTH
+        y_scale = img_cv_rgb.shape[0] / INPUT_HEIGHT
+        cx, cy = x * x_scale, y * y_scale
+        bw, bh = w * x_scale, h * y_scale
+        x1, y1 = int(cx - bw/2), int(cy - bh/2)
+        boxes.append([x1, y1, int(bw), int(bh)])
+        confidences.append(float(conf))
+        class_ids.append(class_id)
+    
     if not boxes:
-        return img_cv, class_counts
-
+        return img_cv_rgb, class_counts
+    
     indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, nms_threshold)
     if len(indices) > 0:
         indices = indices.flatten()
     else:
-        return img_cv, class_counts
-
+        return img_cv_rgb, class_counts
+    
     if show_only_parasites:
         indices = [i for i in indices if class_ids[i] in parasite_IDs]
-
+    
     for i in indices:
         x, y, w, h = boxes[i]
         class_id = class_ids[i]
         detected_class_name = class_names[class_id]
         class_counts[detected_class_name] += 1
-
+        
         if show_boxes:
             color = COLOR_MAP.get(detected_class_name, COLOR_MAP['default'])
-            cv2.rectangle(img_cv, (x, y), (x+w, y+h), color, 2)
-
+            cv2.rectangle(img_cv_rgb, (x, y), (x+w, y+h), color, 2)
+        
         if show_labels:
             label = f"{detected_class_name}: {confidences[i]:.2f}"
-            cv2.putText(img_cv, label, (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 1, cv2.LINE_AA)
-
-    return img_cv, class_counts
+            cv2.putText(img_cv_rgb, label, (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 
+                        0.6, (0,0,0), 2, cv2.LINE_AA)
+            cv2.putText(img_cv_rgb, label, (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 
+                        0.6, (255,255,255), 1, cv2.LINE_AA)
+    
+    return img_cv_rgb, class_counts
                       
 # --- User Interface ---
 st.header(" 🩸 Upload image of blood smear slide")
