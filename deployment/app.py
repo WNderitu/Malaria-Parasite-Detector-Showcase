@@ -73,6 +73,64 @@ with st.expander("⚠️ Model Performance Information", expanded=False):
     - Best performance on trophozoite and RBC detection
     """)
 
+# Add WHO parasitemia classification guide
+with st.expander("📖 WHO Parasitemia Classification Guide", expanded=False):
+    st.markdown("""
+    ### Parasitemia Calculation
+    **Parasitemia (%) = (Total Parasites Detected / Total Cells Detected) × 100**
+    
+    This represents the percentage of cells infected with malaria parasites.
+    
+    ---
+    
+    ### Classification Thresholds
+    
+    | Category | Parasitemia Range | Clinical Significance | Action Required |
+    |----------|-------------------|----------------------|-----------------|
+    | **Negative** | 0% | No parasites detected | No immediate action |
+    | **Minimal** | < 0.1% | Very low parasitemia | Monitor, confirm with microscopy |
+    | **Mild** | 0.1% - 2% | Low-level infection | Outpatient treatment |
+    | **Moderate** | 2% - 5% | Moderate infection | Close monitoring, treatment |
+    | **Severe** | > 5% | High parasite burden | **Immediate medical attention required** |
+    
+    ---
+    
+    ### Clinical Notes
+    
+    #### Severe Malaria Indicators (WHO):
+    - Parasitemia > 5% in non-immune patients
+    - Parasitemia > 10% regardless of immune status
+    - Presence of schizonts in peripheral blood
+    - Multiple parasite life stages present
+    
+    #### P. vivax Specific Considerations:
+    - P. vivax typically has lower parasitemia than P. falciparum
+    - Gametocytes indicate transmission potential
+    - Relapses common due to hypnozoites (dormant liver stage)
+    - Lower parasitemia can still cause severe symptoms
+    
+    ---
+    
+    ### Parasite Life Stages
+    
+    - **Ring Stage**: Early infection, most common form seen
+    - **Trophozoite**: Active feeding stage, larger than rings
+    - **Schizont**: Mature stage before red cell rupture, indicates active multiplication
+    - **Gametocyte**: Sexual stage, indicates transmission potential to mosquitoes
+    
+    ---
+    
+    **⚠️ Important Disclaimer:**
+    
+    This tool is designed for **research and screening purposes only**. It should NOT replace:
+    - Professional microscopic examination by trained technicians
+    - Clinical diagnosis by qualified healthcare providers
+    - Standard diagnostic protocols and confirmatory testing
+    
+    Always consult healthcare professionals for medical decisions.
+    """)
+    
+
 # --- Dynamic Sidebar ---
 st.sidebar.header("⚙️ Model & Visualization Settings")
 
@@ -134,16 +192,16 @@ def process_image(session, image, conf_threshold, nms_threshold, class_names,
     # Enhanced Color maps with better contrast
     DEFAULT_COLOR_MAP = {
         'red blood cell': (0, 0, 255),      # Red
-        'leukocyte': (255, 255, 255),       # White
+        'leukocyte': (255, 255, 0),         # Bright Yellow (changed from white for visibility)
         'schizont': (0, 255, 255),          # Cyan
         'ring': (0, 255, 0),                # Green
         'gametocyte': (255, 0, 255),        # Magenta
-        'trophozoite': (255, 165, 0),       # Orange (changed from blue for better visibility)
+        'trophozoite': (255, 165, 0),       # Orange
         'default': (128, 128, 128)
     }
     HIGH_CONTRAST_MAP = {
         'red blood cell': (255, 0, 0),
-        'leukocyte': (255, 255, 0),
+        'leukocyte': (255, 255, 0),         # Bright Yellow
         'schizont': (0, 255, 255),
         'ring': (0, 255, 0),
         'gametocyte': (255, 0, 255),
@@ -152,7 +210,7 @@ def process_image(session, image, conf_threshold, nms_threshold, class_names,
     }
     PASTEL_MAP = {
         'red blood cell': (255, 182, 193),
-        'leukocyte': (255, 255, 224),
+        'leukocyte': (255, 250, 205),       # Light Yellow (more visible than pale cream)
         'schizont': (175, 238, 238),
         'ring': (144, 238, 144),
         'gametocyte': (221, 160, 221),
