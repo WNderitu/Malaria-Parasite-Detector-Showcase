@@ -10,7 +10,7 @@ import onnxruntime as ort
 
 # Set page configuration
 st.set_page_config(
-    page_title="Malaria Parasite (P.vivax) Detector using YOLOv8n",
+    page_title="Malaria Parasite (P.vivax) Detector using YOLOv8n v2",
     layout="wide"
 )
 
@@ -52,7 +52,7 @@ def load_class_names(classes_path):
 session = load_onnx_model(model_path)
 class_names = load_class_names(classes_path)
 
-st.title("🔬 Malaria Parasite (P.vivax) Detection using YOLOV8n")
+st.title("🔬 Malaria Parasite (P.vivax) Detection using YOLOV8n v2")
 
 # --- Dynamic Sidebar ---
 st.sidebar.header("⚙️ Model & Visualization Settings")
