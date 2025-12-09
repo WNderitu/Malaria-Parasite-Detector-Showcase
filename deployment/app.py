@@ -199,4 +199,4 @@ if uploaded_files and session and class_names:
                     value=parasitemia_display,
                     help=("Calculated as: (Total Parasite Detections / Total Cell Detections) * 100.")
                 )
-                st.info(f"**Total Objects Counted:** {total_d
+                st.info(f"**Total Objects Counted:** {total_detections}")
