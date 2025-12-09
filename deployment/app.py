@@ -108,9 +108,15 @@ def process_image(net, image, conf_threshold, nms_threshold, class_names,
 
     boxes, confidences, class_ids = [], [], []
     
-    # Get the Class IDs for parasite stages
-    # Assuming class_names order aligns with model output
+# --- UPDATED SECTION FOR PARASITE IDs ---
+    # We rely on the globally defined PARASITE_STAGES list and dynamically find their indices
+    # based on the order of the loaded class_names list.
+    PARASITE_STAGES = ['schizont', 'ring', 'gametocyte', 'trophozoite']
+    
+    # We only include the ID if the class name is actually in the loaded list.
     parasite_IDs = {class_names.index(cls) for cls in PARASITE_STAGES if cls in class_names}
+    
+    # For reference, based on the standard list, parasite_IDs should be {2, 3, 4, 5}
 
 
     # Color maps (Defined in BGR format for OpenCV drawing)
@@ -165,6 +171,7 @@ def process_image(net, image, conf_threshold, nms_threshold, class_names,
         return img_cv, class_counts
 
     if show_only_parasites:
+        # This line now uses the correct, dynamically generated parasite_IDs set
         indices = [i for i in indices if class_ids[i] in parasite_IDs]
 
     for i in indices:
