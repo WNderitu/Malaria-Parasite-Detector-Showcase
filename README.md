@@ -112,8 +112,6 @@ Data preparation entailed:
 ### Deployment
 https://malaria-parasite-detector-version-2-kuhwhgejcrbgyxsma4pzrp.streamlit.app/
 
-<img width="305" height="42" alt="image" src="https://github.com/user-attachments/assets/34cdb11c-c27b-4b77-843c-8f4a7d2741de" />
-
 ## Recommendations/Future work
 1. Use larger YOLOv8 model e.g. medium variant
 2. Use 2 stages for detecting & classifying malaria parasites
