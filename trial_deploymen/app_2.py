@@ -12,8 +12,7 @@ import io
 # 1. Path to your ONNX model weights
 # --- File Paths ---
 base_path = os.path.dirname(__file__)
-model_path = os.path.join(base_path, 'best.onnx')
-classes_path = os.path.join(base_path, 'classes.txt')
+model_path = os.path.join(base_path, 'best (2).onnx')
 
 # --- Validate Files ---
 # Check if files exist
@@ -21,11 +20,6 @@ if not os.path.exists(model_path):
     st.error(f"ONNX model not found at: {model_path}")
 else:
     st.success("✅ ONNX model loaded successfully.")
-
-if not os.path.exists(classes_path):
-    st.error(f"Class names file not found at: {classes_path}")
-else:
-    st.success(" ✅ Class names file loaded successfully.")
 
 # 2. Optimal Thresholds determined from your iterative search
 OPTIMAL_CONFIDENCE = 0.001
