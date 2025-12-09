@@ -69,8 +69,7 @@ color_scheme = st.sidebar.selectbox("Color Scheme", ["Default", "High Contrast",
 def process_image(net, image, conf_threshold, nms_threshold, class_names,
                   show_boxes=True, show_labels=True, show_only_parasites=False, color_scheme="Default"):
     INPUT_WIDTH, INPUT_HEIGHT = 1280, 1280
-    # img_cv = np.array(image.convert("RGB"))
-    img_cv = cv2.cvtColor(img_cv_rgb, cv2.COLOR_RGB2BGR) # Convert to BGR
+    img_cv = np.array(image.convert("RGB"))
     blob = cv2.dnn.blobFromImage(img_cv, 1/255.0, (INPUT_WIDTH, INPUT_HEIGHT), swapRB=True, crop=False)
     net.setInput(blob)
     preds = net.forward()
